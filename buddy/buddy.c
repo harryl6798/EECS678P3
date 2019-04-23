@@ -118,6 +118,24 @@ void buddy_init()
 void *buddy_alloc(int size)
 {
 	/* TODO: IMPLEMENT THIS FUNCTION */
+	if (size > (1<<MAX_ORDER))
+	{
+		printf("You can't allocate over the max block size");
+		exit(0);
+	}
+	int cur_size = (1<< MIN_ORDER);
+	if (size < (1<< MIN_ORDER))
+	{
+		cur_size = (1<< MIN_ORDER);
+	}
+
+	while(cur_size < size)
+	{
+		cur_size++;
+	}
+	//What am I doing here? The fuck.
+
+	
 	return NULL;
 }
 
