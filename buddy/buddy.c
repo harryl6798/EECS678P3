@@ -14,6 +14,7 @@
  **************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #include "buddy.h"
 #include "list.h"
@@ -51,7 +52,6 @@
 typedef struct {
 	struct list_head list;
 	/* TODO: DECLARE NECESSARY MEMBER VARIABLES */
-
 	int index;
 	int page_order;
 	char* mem_loc;
@@ -77,6 +77,60 @@ page_t g_pages[(1<<MAX_ORDER)/PAGE_SIZE];
  * Local Functions
  **************************************************************************/
 
+
+/**
+ * Return the minimal block order which can contain the  
+ * memory requested.
+ */
+int get_order(int size){
+	int ord = 1;
+	size--;
+	while(size>>=1){
+		ord++;
+	}
+	if(ord < MIN_ORDER)
+		return MIN_ORDER;
+	else
+		return ord;
+}
+
+/**
+ * Given an order of block to obtain, either 
+ * split the larger block, or return a free one
+ */
+void *get_free_block(int order){
+	if(order > MAX_ORDER || order < MIN_ORDER){
+		return NULL;
+	}
+	else if(list_empty(&free_area[order])){
+		//There's no free block of that order, split next level,
+		//add right hand block to the free_area, return the left_hand block
+		void* super_block = get_free_block(order + 1);
+		PDEBUG("Splitting %dK -> %dK + %dK\n", 1 << order+1-10, 1<< order-10, 1<<order-10);
+		//Left block addr  = super_block
+		void* right_block = BUDDY_ADDR(super_block, order);
+		g_pages[ADDR_TO_PAGE(right_block)].page_order = order; //update the order of the pages just split
+		g_pages[ADDR_TO_PAGE(super_block)].page_order = order;
+
+		//add right_block to the free_area
+		list_add(&g_pages[ADDR_TO_PAGE(right_block)].list, &free_area[order]);
+		return super_block;
+	}
+	else{
+		//There's a free block of the correct order
+		page_t *iter = NULL;
+		int lowest_i = INT_MAX;
+		list_for_each_entry(iter, &free_area[order], list){
+			if(iter->index < lowest_i){
+				lowest_i = iter->index;
+			}
+		}
+		list_del_init(&g_pages[lowest_i].list); //Delete the free block from the free_area list
+		return PAGE_TO_ADDR(lowest_i);
+	}
+}
+
+
 /**
  * Initialize the buddy system
  */
@@ -86,9 +140,8 @@ void buddy_init()
 	int n_pages = (1<<MAX_ORDER) / PAGE_SIZE;
 	for (i = 0; i < n_pages; i++) {
 		/* TODO: INITIALIZE PAGE STRUCTURES */
-		INIT_LIST_HEAD(&g_pages[i].list);
 		g_pages[i].index = i;
-		g_pages[i].page_order =-1;
+		g_pages[i].page_order = MAX_ORDER; 
 		g_pages[i].mem_loc = PAGE_TO_ADDR(i);
 	}
 	g_pages[0].page_order = MAX_ORDER;
@@ -119,64 +172,10 @@ void buddy_init()
 void *buddy_alloc(int size)
 {
 	/* TODO: IMPLEMENT THIS FUNCTION */
-	int loc = ceil(log2(size));
-	page_t* new;
-	if (size > (1<<MAX_ORDER))
-	{
-		printf("You can't allocate over the max block size");
-		exit(0);
-	}
-	int cur_order = (1<< MIN_ORDER);
-
-	while((1<<cur_order) < size && cur_order <= MAX_ORDER)
-	{
-		cur_order++;
-	}
-	
-	for (int r = cur_order; r <= MAX_ORDER; r++)
-	{
-		if(!list_empty(&free_area[r]))
-		{
-			page_t* left_s;
-			page_t* right_s;
-			int num_index;
-			void* exo;
-			if(r == loc)
-			{
-				left_s= list_entry(free_area[r].next, page_t, list);
-				list_del(&(left_s->list));
-			}
-			else
-			{
-				left_s = &g_pages[ADDR_TO_PAGE(buddy_alloc(1<<(cur_order+1)))];
-				num_index = left_s->index + (1<< cur_order)/PAGE_SIZE;
-				right_s = &g_pages[num_index];
-
-
-
-				list_add(&(right_s -> list), &free_area[cur_order]);
-
-			}
-
-			left_s->page_order = cur_order;
-			exo = PAGE_TO_ADDR(left_s->index);
-			return exo;
-			
-			
-			
-		}
-		
-	}
-
-	// while(cur_order <= size)
-	// {
-	// 	cur_order++;
-	// }
-
-
-
-	
-	return NULL;
+	int order = get_order(size);
+	PDEBUG("%d",order);
+	fflush(stdout);
+	return get_free_block(order);
 }
 
 /**
@@ -191,6 +190,7 @@ void *buddy_alloc(int size)
 void buddy_free(void *addr)
 {
 	/* TODO: IMPLEMENT THIS FUNCTION */
+
 }
 
 /**
@@ -211,3 +211,4 @@ void buddy_dump()
 	}
 	printf("\n");
 }
+
