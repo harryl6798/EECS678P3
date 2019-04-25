@@ -175,7 +175,6 @@ void *buddy_alloc(int size)
 	int order = get_order(size);
 	PDEBUG("%d",order);
 	fflush(stdout);
-
 	return get_free_block(order);
 }
 
