@@ -91,8 +91,9 @@ void buddy_init()
 		g_pages[i].page_order =-1;
 		g_pages[i].mem_loc = PAGE_TO_ADDR(i);
 	}
-
-	/* initialize freelist */
+	g_pages[0].page_order = MAX_ORDER;
+	
+		/* initialize freelist */
 	for (i = MIN_ORDER; i <= MAX_ORDER; i++) {
 		INIT_LIST_HEAD(&free_area[i]);
 	}
@@ -118,22 +119,61 @@ void buddy_init()
 void *buddy_alloc(int size)
 {
 	/* TODO: IMPLEMENT THIS FUNCTION */
+	int loc = ceil(log2(size));
+	page_t* new;
 	if (size > (1<<MAX_ORDER))
 	{
 		printf("You can't allocate over the max block size");
 		exit(0);
 	}
-	int cur_size = (1<< MIN_ORDER);
-	if (size < (1<< MIN_ORDER))
+	int cur_order = (1<< MIN_ORDER);
+
+	while((1<<cur_order) < size && cur_order <= MAX_ORDER)
 	{
-		cur_size = (1<< MIN_ORDER);
+		cur_order++;
+	}
+	
+	for (int r = cur_order; r <= MAX_ORDER; r++)
+	{
+		if(!list_empty(&free_area[r]))
+		{
+			page_t* left_s;
+			page_t* right_s;
+			int num_index;
+			void* exo;
+			if(r == loc)
+			{
+				left_s= list_entry(free_area[r].next, page_t, list);
+				list_del(&(left_s->list));
+			}
+			else
+			{
+				left_s = &g_pages[ADDR_TO_PAGE(buddy_alloc(1<<(cur_order+1)))];
+				num_index = left_s->index + (1<< cur_order)/PAGE_SIZE;
+				right_s = &g_pages[num_index];
+
+
+
+				list_add(&(right_s -> list), &free_area[cur_order]);
+
+			}
+
+			left_s->page_order = cur_order;
+			exo = PAGE_TO_ADDR(left_s->index);
+			return exo;
+			
+			
+			
+		}
+		
 	}
 
-	while(cur_size < size)
-	{
-		cur_size++;
-	}
-	//What am I doing here? The fuck.
+	// while(cur_order <= size)
+	// {
+	// 	cur_order++;
+	// }
+
+
 
 	
 	return NULL;
