@@ -144,8 +144,9 @@ void buddy_init()
 		g_pages[i].page_order = MAX_ORDER; 
 		g_pages[i].mem_loc = PAGE_TO_ADDR(i);
 	}
-
-	/* initialize freelist */
+	g_pages[0].page_order = MAX_ORDER;
+	
+		/* initialize freelist */
 	for (i = MIN_ORDER; i <= MAX_ORDER; i++) {
 		INIT_LIST_HEAD(&free_area[i]);
 	}
