@@ -1,0 +1,7 @@
+*.vs
+*.vscode
+*.o
+*.zip
+*.tar*
+*.tar
+*.tar.gz
