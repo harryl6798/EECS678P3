@@ -7,7 +7,7 @@
 /**************************************************************************
  * Conditional Compilation Options
  **************************************************************************/
-#define USE_DEBUG 0
+#define USE_DEBUG 1
 
 /**************************************************************************
  * Included Files
@@ -55,6 +55,7 @@ typedef struct {
 	int index;
 	int page_order;
 	char* mem_loc;
+	int allocd;
 } page_t;
 
 /**************************************************************************
@@ -106,7 +107,7 @@ void *get_free_block(int order){
 		//There's no free block of that order, split next level,
 		//add right hand block to the free_area, return the left_hand block
 		void* super_block = get_free_block(order + 1);
-		PDEBUG("Splitting %dK -> %dK + %dK\n", 1 << order+1-10, 1<< order-10, 1<<order-10);
+		// PDEBUG("Splitting %dK -> %dK + %dK\n", 1 << order+1-10, 1<< order-10, 1<<order-10);
 		//Left block addr  = super_block
 		void* right_block = BUDDY_ADDR(super_block, order);
 		g_pages[ADDR_TO_PAGE(right_block)].page_order = order; //update the order of the pages just split
@@ -126,10 +127,57 @@ void *get_free_block(int order){
 			}
 		}
 		list_del_init(&g_pages[lowest_i].list); //Delete the free block from the free_area list
+		
+		g_pages[lowest_i].allocd = 1; //Set the allocd flag
+		
 		return PAGE_TO_ADDR(lowest_i);
 	}
 }
 
+void try_merge(void* addr, int ord){
+
+	PDEBUG("Attempting merge of order %d\n", ord);
+	fflush(stderr);
+	if(ord >= MAX_ORDER){
+		PDEBUG("Merged top-level\n");
+		fflush(stderr);
+		return;
+	}
+
+	void* buddy_addr = BUDDY_ADDR(addr, ord);
+	if(buddy_addr < addr){ // Swap so addr is left block
+		PDEBUG("Swapping left and right\n");
+		fflush(stderr);
+		void* temp = addr;
+		addr = buddy_addr;
+		buddy_addr = temp;
+	}
+
+	page_t *addr_pg = &g_pages[ADDR_TO_PAGE(addr)];
+	page_t *buddy_pg = &g_pages[ADDR_TO_PAGE(buddy_addr)];
+
+	if(buddy_pg->allocd == 0 && addr_pg->allocd == 0 && addr_pg->page_order == buddy_pg->page_order){ //If the buddy isn't alloc'd
+		PDEBUG("Pages not alloc'd\n");
+		fflush(stderr);
+
+		//Delete both from the free_area, and try to merge the left_most
+		list_del_init(&addr_pg->list);
+		list_del_init(&buddy_pg->list);
+		addr_pg->page_order = ord+1;
+
+		PDEBUG("Buddies deleted from list, order increased by one\n");
+		fflush(stderr);
+
+		list_add(&addr_pg->list, &free_area[ord+1]);
+		try_merge(addr, ord+1);
+		return;
+	}
+	else{
+		PDEBUG("One of the pages was not free\n");
+		fflush(stderr);
+		return;
+	}
+}
 
 /**
  * Initialize the buddy system
@@ -143,6 +191,7 @@ void buddy_init()
 		g_pages[i].index = i;
 		g_pages[i].page_order = MAX_ORDER; 
 		g_pages[i].mem_loc = PAGE_TO_ADDR(i);
+		g_pages[i].allocd = 0;
 	}
 	g_pages[0].page_order = MAX_ORDER;
 	
@@ -173,7 +222,7 @@ void *buddy_alloc(int size)
 {
 	/* TODO: IMPLEMENT THIS FUNCTION */
 	int order = get_order(size);
-	PDEBUG("%d",order);
+	//PDEBUG("%d",order);
 	fflush(stdout);
 	return get_free_block(order);
 }
@@ -189,8 +238,15 @@ void *buddy_alloc(int size)
  */
 void buddy_free(void *addr)
 {
-	/* TODO: IMPLEMENT THIS FUNCTION */
-
+	PDEBUG("Freeing page\n");
+	fflush(stdin);
+	int page_i = ADDR_TO_PAGE(addr);
+	//int buddy_i = ADDR_TO_PAGE(BUDDY_ADDR(addr, g_pages[page_i].page_order));
+	//Set page to free, and add to free list
+	g_pages[page_i].allocd = 0;
+	list_add(&g_pages[page_i].list, &free_area[g_pages[page_i].page_order]);
+	try_merge(addr, g_pages[page_i].page_order);
+	return;
 }
 
 /**
